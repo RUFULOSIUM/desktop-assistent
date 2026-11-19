@@ -34,6 +34,11 @@ htmlcov/
 # macOS
 .DS_Store
 
+# IDE / editor
+.opencode/
+.vscode/
+.idea/
+
 # Local config / models (never commit user data or downloaded models)
 .env
 *.local.toml
