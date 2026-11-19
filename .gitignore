@@ -1,0 +1,40 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# Build artifacts
+build/
+dist/
+*.so
+*.dylib
+*.o
+
+# C extension build output
+native/**/build/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# App bundles / packaging output
+*.app/
+*.dmg
+
+# macOS
+.DS_Store
+
+# Local config / models (never commit user data or downloaded models)
+.env
+*.local.toml
+resources/models/
