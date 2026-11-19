@@ -26,6 +26,7 @@ native/**/build/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+coverage.xml
 
 # App bundles / packaging output
 *.app/
