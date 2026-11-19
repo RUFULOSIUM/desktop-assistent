@@ -131,7 +131,7 @@ Build a modular, voice-first macOS assistant that lives at the camera notch, wit
 ## Dependencies & Risks
 
 | Risk | Mitigation |
-|------|------------|
+| ------ | ------------ |
 | Keras classifier dataset | Start synthetic data generation early |
 | C/Python audio bridge | Prototype ring buffer first |
 | Notch UI on non-notch Macs | Design fallback early |
