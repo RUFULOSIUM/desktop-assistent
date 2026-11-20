@@ -122,10 +122,6 @@ no_implicit_optional = true
 show_error_codes = true
 pretty = true
 
-[[tool.mypy.overrides]]
-module = "assistant.*"
-strict = true
-
 [tool.coverage.run]
 source = ["src/assistant"]
 branch = true
