@@ -8,12 +8,12 @@ Build a modular, voice-first macOS assistant that lives at the camera notch, wit
 
 ## Phase 0: Project Foundation
 
-- [ ] Initialize git repo with initial commit
-- [ ] Set up uv project with pyproject.toml
+- [x] Initialize git repo with initial commit
+- [x] Set up uv project with pyproject.toml
 - [ ] Create virtualenv and install dev dependencies (pytest, ruff, mypy)
 - [ ] Configure pytest for 100% coverage target
 - [ ] Add pre-commit hooks
-- [ ] Choose and add license (usable but not copyable)
+- [x] Choose and add license (Apache-2.0 in pyproject.toml; final choice TBD per QUESTIONS.md)
 
 ---
 
@@ -31,13 +31,13 @@ Build a modular, voice-first macOS assistant that lives at the camera notch, wit
 
 ## Phase 2: Audio Pipeline (C + Python)
 
-- [ ] Native ring buffer (`native/ringbuffer/`)
+- [x] Native ring buffer (`native/ringbuffer/`)
   - C implementation with Python C extension
   - Thread-safe, lock-free for audio callback
-- [ ] Audio capture (`src/assistant/audio/capture.py`)
+- [x] Audio capture (`src/assistant/audio/capture.py`)
   - Core Audio / AudioUnit integration
   - VAD integration (`src/assistant/audio/vad.py`)
-- [ ] Ring buffer Python wrapper (`src/assistant/audio/ringbuffer.py`)
+- [x] Ring buffer Python wrapper (`src/assistant/audio/ringbuffer.py`)
 
 ---
 
