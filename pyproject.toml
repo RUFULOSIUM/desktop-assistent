@@ -18,7 +18,11 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Desktop Environment",
 ]
-dependencies = []
+dependencies = [
+    "pypinyin>=0.55.0",
+    "sentencepiece>=0.2.3",
+    "sherpa-onnx>=2.0.2",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -35,10 +39,12 @@ audio = [
     "webrtcvad>=2.0",
     "pyobjc>=13.0",
 ]
-# stt = [
-#     "faster-whisper>=1.0",
-#     "mlx-whisper>=0.1",
-# ]
+stt = [
+    "faster-whisper>=1.0",
+    "mlx-whisper>=0.1",
+    "openai>=1.0",
+    "scipy>=1.10",
+]
 # llm = [
 #     "openai>=1.0",
 #     "httpx>=0.27",
@@ -49,8 +55,7 @@ audio = [
 #     "pyobjc-framework-ApplicationServices>=10.0",
 # ]
 wake = [
-    "openwakeword>=0.6; sys_platform == 'darwin'",
-    "onnxruntime>=1.18",
+    "sherpa-onnx>=1.10; sys_platform == 'darwin'",
 ]
 # agent = [
 #     "pi-mono @ git+https://github.com/badlogic/pi-mono@main",

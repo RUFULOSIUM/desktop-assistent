@@ -7,20 +7,38 @@ from unittest.mock import MagicMock, patch
 
 import pytest  # type: ignore[import-not-found]
 
-# Create a mock openwakeword module before any imports
-mock_openwakeword = MagicMock()
-mock_model_class = MagicMock()
-mock_openwakeword.model.Model = mock_model_class
-sys.modules["openwakeword"] = mock_openwakeword
-sys.modules["openwakeword.model"] = mock_openwakeword.model
+# Create a mock sherpa_onnx module before any imports
+mock_sherpa = MagicMock()
+mock_kws = MagicMock()
+mock_stream = MagicMock()
+
+mock_kws.create_stream.return_value = mock_stream
+# is_ready called per process_frame:
+# 1st frame: False
+# 2nd frame: True -> get_result="", then is_ready=False
+# 3rd frame: True -> get_result="HEY_ASSISTANT" -> detected!
+mock_kws.is_ready.side_effect = [False, True, False, True]
+mock_kws.get_result.side_effect = ["", "HEY_ASSISTANT"]
+mock_sherpa.KeywordSpotter.return_value = mock_kws
+sys.modules["sherpa_onnx"] = mock_sherpa
 
 
 def create_fake_model_dir() -> Path:
-    """Create a temporary directory with a fake .onnx model file."""
+    """Create a temporary directory with fake sherpa-onnx model files."""
     tmpdir = tempfile.mkdtemp()
-    model_file = Path(tmpdir) / "hey_assistant.onnx"
-    model_file.write_bytes(b"fake onnx model")
-    return Path(tmpdir)
+    model_dir = Path(tmpdir)
+
+    # Create required model files
+    tokens_content = (
+        "<blk> 0\n<sos/eos> 1\nHH 2\nEY1 3\nAH0 4\nS 5\nIH1 6\nT 7\nN 8\n"
+    )
+    (model_dir / "tokens.txt").write_text(tokens_content)
+    (model_dir / "encoder-epoch-13-avg-2-chunk-16-left-64.onnx").write_bytes(b"fake encoder")
+    (model_dir / "decoder-epoch-13-avg-2-chunk-16-left-64.onnx").write_bytes(b"fake decoder")
+    (model_dir / "joiner-epoch-13-avg-2-chunk-16-left-64.onnx").write_bytes(b"fake joiner")
+    (model_dir / "keywords.txt").write_text("HH EY1 AH0 S IH1 S T AH0 N T @HEY_ASSISTANT\n")
+
+    return model_dir
 
 
 @pytest.mark.integration  # type: ignore[untyped-decorator]
@@ -32,9 +50,9 @@ def test_wake_pipeline_flow() -> None:
     from assistant.audio.ringbuffer import AudioRingBuffer
     from assistant.audio.vad import VoiceActivityDetector
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    wake_config = WakeConfig(word="hey assistant", enabled=True)
+    wake_config = WakeConfig(word="HEY_ASSISTANT", enabled=True)
 
     rb = AudioRingBuffer(capacity_frames=16000 * 2, num_channels=1, dtype=np.int16)
     vad = VoiceActivityDetector(aggressiveness=3, sample_rate=16000, frame_duration_ms=30)
@@ -46,17 +64,9 @@ def test_wake_pipeline_flow() -> None:
         wake_detected["detected"] = True
         wake_detected["model"] = model_name
 
-    mock_model = MagicMock()
-    # First call: no detection, second call: detection
-    mock_model.predict.side_effect = [
-        {"hey_assistant": 0.0},
-        {"hey_assistant": 0.8},
-    ]
-    mock_model_class.return_value = mock_model
-
     model_dir = create_fake_model_dir()
     try:
-        engine = WakeWordEngine(wake_config, model_dir=model_dir)
+        engine = SherpaWakeEngine(wake_config, model_dir=model_dir)
         engine.set_callback(on_wake)
         engine.start()
 
@@ -65,17 +75,14 @@ def test_wake_pipeline_flow() -> None:
             capture.start()
 
             # Simulate audio frames being written to ring buffer
-            frame = bytes(960)  # 30ms silence
+            frame = bytes(1920)  # 960 samples (60ms at 16kHz)
             for _ in range(10):
                 rb.write(frame)
 
-            # Process frames through wake engine
-            for _ in range(2):
-                data = rb.read(960)
-                if len(data) == 960:
-                    # Need 3 frames per 80ms processing window
-                    engine.process_frame(data)
-                    engine.process_frame(data)
+            # Process frames through wake engine (need 3 for mock sequence)
+            for _ in range(3):
+                data = rb.read(1920)
+                if len(data) == 1920:
                     engine.process_frame(data)
 
             capture.stop()
@@ -83,7 +90,7 @@ def test_wake_pipeline_flow() -> None:
         engine.stop()
 
         assert wake_detected["detected"] is True
-        assert wake_detected["model"] == "hey_assistant"
+        assert wake_detected["model"] == "HEY_ASSISTANT"
     finally:
         for f in model_dir.glob("*"):
             f.unlink()

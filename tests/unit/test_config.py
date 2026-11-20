@@ -12,7 +12,7 @@ def test_config_defaults() -> None:
 
     cfg = Config.get_default()
     assert cfg.security.level == "standard"
-    assert cfg.wake.word == "hey assistant"
+    assert cfg.wake.word == "HEY_ASSISTANT"
     assert cfg.wake.enabled is True
     assert cfg.stt.provider == "cloud"
     assert cfg.llm.provider == "local"
@@ -189,7 +189,7 @@ def test_config_missing_file_returns_default() -> None:
 
     cfg = Config.load(Path("/nonexistent/path/config.toml"))
     assert cfg.security.level == "standard"
-    assert cfg.wake.word == "hey assistant"
+    assert cfg.wake.word == "HEY_ASSISTANT"
 
 
 def test_config_api_key_excluded_when_empty() -> None:

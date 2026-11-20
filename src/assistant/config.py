@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import tomli  # type: ignore[import-not-found]
-import tomli_w  # type: ignore[import-not-found]
+import tomli
+import tomli_w
 
 
 @dataclass
@@ -30,7 +30,7 @@ class WakeConfig:
     """Wake word configuration."""
 
     enabled: bool = True
-    word: str = "hey assistant"
+    word: str = "HEY_ASSISTANT"
     fallback_double_click: bool = True
     fallback_triple_shift: bool = True
 

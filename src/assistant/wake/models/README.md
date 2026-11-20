@@ -1,15 +1,16 @@
-# Wake-word models
+---
+frameworks:
+- 其他
+license: Apache License 2.0
+tasks:
+- keyword-spotting
+---
 
-Drop trained openWakeWord `.onnx` models here. The assistant loads the first
-`*.onnx` found when no `wake_model` is configured.
+sherpa 中自定义唤醒词模型，训练数据为 gigaspeech XL （10000 小时）数据，模型大小约为 3.3 M， 建模单元为 BPE 。 使用 icefall 训练，已转换为 onnx 格式，此仓库主要是给 sherpa-onnx 这个 inference 引擎使用。
 
-Recommended bundled default: `hey_assistant` (generic, agent-neutral).
+模型结构为 zipformer 模型， 本质是一个非常小的语音识别模型，为了实现唤醒词的功能，我们在解码端做了一些修改和约束。 支持自定义唤醒词，数量不限，效果需要单个调整参数。
 
-Train a model with openWakeWord (100% synthetic speech, speaker-independent):
-
-1. Open the official openWakeWord training notebook (free T4 GPU, ~10 min).
-2. Set the target phrase, run all cells, download the `.onnx`.
-3. Copy it here as `<name>.onnx`, then `assistant config set wake_model <name>`.
-
-Models are not committed to git (see `.gitignore`); ship them via the packaging
-step or the `.app` bundle.
+#### Clone with HTTP
+```bash
+ git clone https://www.modelscope.cn/pkufool/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.git
+```

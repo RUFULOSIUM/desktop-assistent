@@ -4,32 +4,32 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import click  # type: ignore[import-not-found]
+import click
 
 from . import __version__
 from .config import Config
 
 
-@click.group()  # type: ignore[untyped-decorator]
-@click.option(  # type: ignore[untyped-decorator]
+@click.group()
+@click.option(
     "--config",
     "-c",
     type=click.Path(exists=True),
     help="Path to configuration file.",
 )
-@click.option(  # type: ignore[untyped-decorator]
+@click.option(
     "--verbose",
     "-v",
     count=True,
     help="Increase verbosity (use -v, -vv, -vvv).",
 )
-@click.option(  # type: ignore[untyped-decorator]
+@click.option(
     "--log-file",
     type=click.Path(),
     help="Path to log file.",
 )
-@click.version_option(version=__version__, prog_name="desktop-assistant")  # type: ignore[untyped-decorator]
-@click.pass_context  # type: ignore[untyped-decorator]
+@click.version_option(version=__version__, prog_name="desktop-assistant")
+@click.pass_context
 def main(
     ctx: click.Context,
     config: str | None,
@@ -43,26 +43,26 @@ def main(
     ctx.obj["log_file"] = Path(log_file) if log_file else None
 
 
-@main.command()  # type: ignore[untyped-decorator]
-@click.option(  # type: ignore[untyped-decorator]
+@main.command()
+@click.option(
     "--no-ui",
     is_flag=True,
     help="Run without UI (headless mode).",
 )
-@click.pass_context  # type: ignore[untyped-decorator]
+@click.pass_context
 def run(_ctx: click.Context, no_ui: bool) -> None:  # noqa: ARG001
     """Start the assistant."""
     click.echo("Starting Desktop Assistant...")
     click.echo("This feature is not yet implemented.")
 
 
-@main.group()  # type: ignore[untyped-decorator]
+@main.group()
 def config() -> None:
     """Configuration management."""
 
 
-@config.command("show")  # type: ignore[untyped-decorator]
-@click.pass_context  # type: ignore[untyped-decorator]
+@config.command("show")
+@click.pass_context
 def config_show(ctx: click.Context) -> None:
     """Show current configuration."""
     config_path = ctx.obj.get("config_path")
@@ -74,8 +74,8 @@ def config_show(ctx: click.Context) -> None:
     click.echo(f"Audio sample rate: {cfg.audio.sample_rate} Hz")
 
 
-@config.command("edit")  # type: ignore[untyped-decorator]
-@click.pass_context  # type: ignore[untyped-decorator]
+@config.command("edit")
+@click.pass_context
 def config_edit(ctx: click.Context) -> None:
     """Edit configuration in default editor."""
     config_path = ctx.obj.get("config_path")
@@ -84,7 +84,7 @@ def config_edit(ctx: click.Context) -> None:
     click.echo("Configuration saved.")
 
 
-@main.command()  # type: ignore[untyped-decorator]
+@main.command()
 def doctor() -> None:
     """Run health checks."""
     click.echo("Running health checks...")

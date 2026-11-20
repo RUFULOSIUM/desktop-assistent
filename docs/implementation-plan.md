@@ -51,10 +51,10 @@ Build a modular, voice-first macOS assistant that lives at the camera notch, wit
 
 ## Phase 4: Speech-to-Text
 
-- [ ] Cloud STT abstraction (`src/assistant/stt/__init__.py`)
-- [ ] faster-whisper implementation (`src/assistant/stt/faster_whisper.py`)
-- [ ] MLX Whisper implementation (`src/assistant/stt/mlx_whisper.py`)
-- [ ] Provider selection with fallback chain
+- [x] Cloud STT abstraction (`src/assistant/stt/__init__.py`)
+- [x] faster-whisper implementation (`src/assistant/stt/faster_whisper.py`)
+- [x] MLX Whisper implementation (`src/assistant/stt/mlx_whisper.py`)
+- [x] Provider selection with fallback chain
 
 ---
 

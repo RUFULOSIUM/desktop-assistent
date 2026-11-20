@@ -60,7 +60,7 @@ class AudioCapture:
                 return
             self._running = True
 
-        # Import pyobjc frameworks lazily
+        # Import pyobjc frameworks lazily (optional macOS dependencies)
         try:
             from AudioUnit import (  # type: ignore[import-not-found]
                 AudioComponentDescription,
@@ -78,7 +78,7 @@ class AudioCapture:
                 kAudioUnitSubType_HALOutput,
                 kAudioUnitType_Output,
             )
-            from CoreAudio import (  # type: ignore[import-not-found]
+            from CoreAudio import (  # type: ignore[import-untyped]
                 AudioDeviceID,
                 AudioObjectGetPropertyData,
                 kAudioHardwarePropertyDefaultInputDevice,

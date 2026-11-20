@@ -1,57 +1,62 @@
-"""Tests for openWakeWord engine wrapper."""
+"""Tests for sherpa-onnx wake word engine."""
 
 import tempfile
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 
 def create_fake_model_dir() -> Path:
-    """Create a temporary directory with a fake .onnx model file."""
+    """Create a temporary directory with fake sherpa-onnx model files."""
     tmpdir = tempfile.mkdtemp()
-    model_file = Path(tmpdir) / "hey_assistant.onnx"
-    model_file.write_bytes(b"fake onnx model")
-    return Path(tmpdir)
+    model_dir = Path(tmpdir)
+
+    # Create required model files
+    (model_dir / "tokens.txt").write_text("0\n1\n2\n")
+    (model_dir / "encoder.onnx").write_bytes(b"fake encoder")
+    (model_dir / "decoder.onnx").write_bytes(b"fake decoder")
+    (model_dir / "joiner.onnx").write_bytes(b"fake joiner")
+    (model_dir / "keywords.txt").write_text("hey assistant\nhello world\n")
+
+    return model_dir
 
 
-def make_mock_openwakeword(
-    mock_predict_return: dict[str, float] | None = None,
+def make_mock_sherpa_onnx(
+    mock_get_result_return: str = "",
     mock_side_effect: Exception | None = None,
 ) -> tuple[MagicMock, MagicMock]:
-    """Create a mock openwakeword module with configurable behavior."""
-    mock_openwakeword = MagicMock()
-    mock_model_class = MagicMock()
+    """Create a mock sherpa_onnx module with configurable behavior."""
+    mock_sherpa = MagicMock()
+    mock_kws = MagicMock()
+    mock_stream = MagicMock()
+
+    mock_kws.create_stream.return_value = mock_stream
+    mock_kws.is_ready.return_value = False
+    mock_kws.get_result.return_value = mock_get_result_return
 
     if mock_side_effect:
-        mock_model_class.side_effect = mock_side_effect
+        mock_sherpa.KeywordSpotter.side_effect = mock_side_effect
     else:
-        mock_model = MagicMock()
-        if mock_predict_return is not None:
-            mock_model.predict.return_value = mock_predict_return
-        mock_model_class.return_value = mock_model
+        mock_sherpa.KeywordSpotter.return_value = mock_kws
 
-    mock_openwakeword.model.Model = mock_model_class
-    return mock_openwakeword, mock_model_class
+    return mock_sherpa, mock_kws
 
 
-def patch_sys_modules(mock_openwakeword: MagicMock) -> Any:
-    """Patch sys.modules with mock openwakeword."""
-    return patch.dict(
-        "sys.modules",
-        {"openwakeword": mock_openwakeword, "openwakeword.model": mock_openwakeword.model},
-    )
+def patch_sys_modules(mock_sherpa: MagicMock) -> Any:
+    """Patch sys.modules with mock sherpa_onnx."""
+    return patch.dict("sys.modules", {"sherpa_onnx": mock_sherpa})
 
 
 def test_wake_engine_init() -> None:
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, _ = make_mock_openwakeword()
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, _ = make_mock_sherpa_onnx()
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             assert engine.config == config
             assert engine.is_running() is False
         finally:
@@ -62,22 +67,27 @@ def test_wake_engine_init() -> None:
 
 def test_wake_engine_process_frame() -> None:
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, mock_model_class = make_mock_openwakeword(
-        mock_predict_return={"hey_assistant": 0.0}
-    )
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, mock_kws = make_mock_sherpa_onnx()
+    # get_result is only called when is_ready=True
+    # is_ready sequence: 3x False (no detection), then True, False, True (detection)
+    # get_result sequence: "" (for first True), "hey assistant" (for second True)
+    mock_kws.is_ready.side_effect = [False, False, False, True, False, True]
+    mock_kws.get_result.side_effect = ["", "hey assistant"]
+
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
-        callback = Mock()
+        callback = MagicMock()
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             engine.set_callback(callback)
             engine.start()
 
-            frame = bytes(960)
+            # sherpa-onnx expects 960 bytes (30ms at 16kHz)
+            frame = bytes(1920)  # 960 samples * 2 bytes = 1920 bytes
 
             result = engine.process_frame(frame)
             assert result is False
@@ -87,16 +97,14 @@ def test_wake_engine_process_frame() -> None:
             assert result is False
             assert callback.call_count == 0
 
-            # Update the mock to return detection
-            mock_model = mock_model_class.return_value
-            mock_model.predict.return_value = {"hey_assistant": 0.8}
+            # Next call: is_ready=True, get_result="", is_ready=False -> no detection
             result = engine.process_frame(frame)
             assert result is False
-            result = engine.process_frame(frame)
-            assert result is False
+
+            # Next call: is_ready=True, get_result="hey assistant" -> detected!
             result = engine.process_frame(frame)
             assert result is True
-            callback.assert_called_once_with("hey_assistant")
+            callback.assert_called_once_with("hey assistant")
 
             engine.stop()
         finally:
@@ -108,14 +116,14 @@ def test_wake_engine_process_frame() -> None:
 def test_wake_engine_model_loading_error() -> None:
     from assistant.config import WakeConfig
     from assistant.errors import WakeError
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, _ = make_mock_openwakeword()
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, _ = make_mock_sherpa_onnx()
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
 
         try:
-            engine = WakeWordEngine(config, model_dir=Path("/nonexistent"))
+            engine = SherpaWakeEngine(config, model_dir=Path("/nonexistent"))
             engine.start()
             raise AssertionError("Should have raised WakeError")
         except WakeError as e:
@@ -124,17 +132,17 @@ def test_wake_engine_model_loading_error() -> None:
 
 def test_wake_engine_config_integration() -> None:
     from assistant.config import Config
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, _ = make_mock_openwakeword()
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, _ = make_mock_sherpa_onnx()
+    with patch_sys_modules(mock_sherpa):
         cfg = Config.get_default()
         cfg.wake.word = "computer"
         cfg.wake.enabled = True
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(cfg.wake, model_dir=model_dir)
+            engine = SherpaWakeEngine(cfg.wake, model_dir=model_dir)
             assert engine.config.word == "computer"
             assert engine.config.enabled is True
         finally:
@@ -145,15 +153,15 @@ def test_wake_engine_config_integration() -> None:
 
 def test_wake_engine_start_stop() -> None:
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, _ = make_mock_openwakeword()
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, _ = make_mock_sherpa_onnx()
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             assert engine.is_running() is False
 
             engine.start()
@@ -169,15 +177,15 @@ def test_wake_engine_start_stop() -> None:
 
 def test_wake_engine_double_start() -> None:
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, _ = make_mock_openwakeword()
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, _ = make_mock_sherpa_onnx()
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             engine.start()
             engine.start()
             assert engine.is_running() is True
@@ -190,20 +198,22 @@ def test_wake_engine_double_start() -> None:
 
 def test_wake_engine_callback_none() -> None:
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, mock_model_class = make_mock_openwakeword(
-        mock_predict_return={"hey_assistant": 0.8}
-    )
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, mock_kws = make_mock_sherpa_onnx()
+    # 2x False, then True (get_result="hey assistant"), then False
+    mock_kws.is_ready.side_effect = [False, False, True, False]
+    mock_kws.get_result.side_effect = ["hey assistant"]
+
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             engine.start()
 
-            frame = bytes(960)
+            frame = bytes(1920)  # 960 samples * 2 bytes = 1920 bytes
             result = engine.process_frame(frame)
             assert result is False
             result = engine.process_frame(frame)
@@ -220,22 +230,22 @@ def test_wake_engine_callback_none() -> None:
 def test_wake_engine_import_error() -> None:
     from assistant.config import WakeConfig
     from assistant.errors import WakeError
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, _ = make_mock_openwakeword()
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, _ = make_mock_sherpa_onnx()
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
 
-            with patch.dict("sys.modules", {"openwakeword": None, "openwakeword.model": None}):
+            with patch.dict("sys.modules", {"sherpa_onnx": None}):
                 try:
                     engine.start()
                     raise AssertionError("Should have raised WakeError")
                 except WakeError as e:
-                    assert "openWakeWord not installed" in str(e)
+                    assert "sherpa-onnx not installed" in str(e)
         finally:
             for f in model_dir.glob("*"):
                 f.unlink()
@@ -245,22 +255,20 @@ def test_wake_engine_import_error() -> None:
 def test_wake_engine_model_load_error() -> None:
     from assistant.config import WakeConfig
     from assistant.errors import WakeError
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, mock_model_class = make_mock_openwakeword(
-        mock_side_effect=RuntimeError("Model load failed")
-    )
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, _ = make_mock_sherpa_onnx(mock_side_effect=RuntimeError("Model load failed"))
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             try:
                 engine.start()
                 raise AssertionError("Should have raised WakeError")
             except WakeError as e:
-                assert "Failed to load wake word model" in str(e)
+                assert "Failed to load keyword spotter model" in str(e)
         finally:
             for f in model_dir.glob("*"):
                 f.unlink()
@@ -269,29 +277,29 @@ def test_wake_engine_model_load_error() -> None:
 
 def test_wake_engine_callback_error() -> None:
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, mock_model_class = make_mock_openwakeword(
-        mock_predict_return={"hey_assistant": 0.8}
-    )
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, mock_kws = make_mock_sherpa_onnx()
+    # 1x False, then True (get_result="hey assistant"), then False
+    mock_kws.is_ready.side_effect = [False, True, False]
+    mock_kws.get_result.side_effect = ["hey assistant"]
+
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
-        callback = Mock(side_effect=RuntimeError("Callback failed"))
+        callback = MagicMock(side_effect=RuntimeError("Callback failed"))
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             engine.set_callback(callback)
             engine.start()
 
-            frame = bytes(960)
-            result = engine.process_frame(frame)
-            assert result is False
+            frame = bytes(1920)  # 960 samples * 2 bytes = 1920 bytes
             result = engine.process_frame(frame)
             assert result is False
             result = engine.process_frame(frame)
             assert result is True
-            callback.assert_called_once_with("hey_assistant")
+            callback.assert_called_once_with("hey assistant")
             engine.stop()
         finally:
             for f in model_dir.glob("*"):
@@ -299,25 +307,22 @@ def test_wake_engine_callback_error() -> None:
             model_dir.rmdir()
 
 
-def test_wake_engine_prediction_error() -> None:
+def test_wake_engine_process_error() -> None:
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, mock_model_class = make_mock_openwakeword(
-        mock_predict_return={"hey_assistant": 0.0}
-    )
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, mock_kws = make_mock_sherpa_onnx(mock_get_result_return="")
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
 
-        mock_model = mock_model_class.return_value
-        mock_model.predict.side_effect = RuntimeError("Prediction failed")
+        mock_kws.is_ready.side_effect = RuntimeError("Prediction failed")
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             engine.start()
 
-            frame = bytes(960)
+            frame = bytes(1920)  # 960 samples * 2 bytes = 1920 bytes
             result = engine.process_frame(frame)
             assert result is False
             result = engine.process_frame(frame)
@@ -333,15 +338,15 @@ def test_wake_engine_prediction_error() -> None:
 
 def test_wake_engine_stop_not_running() -> None:
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, _ = make_mock_openwakeword()
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, _ = make_mock_sherpa_onnx()
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=True)
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             engine.stop()
             assert engine.is_running() is False
         finally:
@@ -352,22 +357,41 @@ def test_wake_engine_stop_not_running() -> None:
 
 def test_wake_engine_disabled() -> None:
     from assistant.config import WakeConfig
-    from assistant.wake.openwakeword_engine import WakeWordEngine
+    from assistant.wake.sherpa_engine import SherpaWakeEngine
 
-    mock_openwakeword, _ = make_mock_openwakeword()
-    with patch_sys_modules(mock_openwakeword):
+    mock_sherpa, _ = make_mock_sherpa_onnx()
+    with patch_sys_modules(mock_sherpa):
         config = WakeConfig(word="hey assistant", enabled=False)
 
         model_dir = create_fake_model_dir()
         try:
-            engine = WakeWordEngine(config, model_dir=model_dir)
+            engine = SherpaWakeEngine(config, model_dir=model_dir)
             engine.start()
 
-            frame = bytes(960)
+            frame = bytes(1920)  # 960 samples * 2 bytes = 1920 bytes
             result = engine.process_frame(frame)
 
             assert result is False
             engine.stop()
+        finally:
+            for f in model_dir.glob("*"):
+                f.unlink()
+            model_dir.rmdir()
+
+
+def test_wake_engine_alias() -> None:
+    """Test that WakeWordEngine alias works."""
+    from assistant.config import WakeConfig
+    from assistant.wake import WakeWordEngine
+
+    mock_sherpa, _ = make_mock_sherpa_onnx()
+    with patch_sys_modules(mock_sherpa):
+        config = WakeConfig(word="hey assistant", enabled=True)
+        model_dir = create_fake_model_dir()
+        try:
+            engine = WakeWordEngine(config, model_dir=model_dir)
+            from assistant.wake.sherpa_engine import SherpaWakeEngine
+            assert isinstance(engine, SherpaWakeEngine)
         finally:
             for f in model_dir.glob("*"):
                 f.unlink()

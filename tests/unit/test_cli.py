@@ -115,6 +115,6 @@ def test_cli_config_show_output() -> None:
         result = runner.invoke(main, ["-c", str(path), "config", "show"])
         assert result.exit_code == 0
         assert "standard" in result.output
-        assert "hey assistant" in result.output
+        assert "HEY_ASSISTANT" in result.output
     finally:
         path.unlink(missing_ok=True)

@@ -7,8 +7,8 @@ C extension is not available.
 
 from __future__ import annotations
 
-import numpy as np  # type: ignore[import-not-found]
-from numpy.typing import NDArray  # type: ignore[import-not-found]
+import numpy as np
+from numpy.typing import NDArray
 
 try:
     import ringbuffer as _c_ringbuffer  # type: ignore[import-not-found]
@@ -72,7 +72,7 @@ class AudioRingBuffer(_BaseRingBuffer):
         self,
         capacity_frames: int,
         num_channels: int = 1,
-        dtype: np.dtype = np.float32,
+        dtype: np.dtype | type = np.float32,
     ) -> None:
         self._num_channels = num_channels
         self._dtype = np.dtype(dtype)

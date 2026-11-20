@@ -54,6 +54,7 @@ def setup_logging(
             maxBytes=config.logging.max_size_mb * 1024 * 1024,
             backupCount=config.logging.backup_count,
             encoding="utf-8",
+            delay=True,
         )
         file_handler.setLevel(config.logging.level)
         file_handler.setFormatter(formatter)
