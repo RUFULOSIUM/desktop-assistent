@@ -10,9 +10,9 @@ Build a modular, voice-first macOS assistant that lives at the camera notch, wit
 
 - [x] Initialize git repo with initial commit
 - [x] Set up uv project with pyproject.toml
-- [ ] Create virtualenv and install dev dependencies (pytest, ruff, mypy)
-- [ ] Configure pytest for 100% coverage target
-- [ ] Add pre-commit hooks
+- [x] Create virtualenv and install dev dependencies (pytest, ruff, mypy)
+- [x] Configure pytest for 100% coverage target
+- [x] Add pre-commit hooks
 - [x] Choose and add license (Apache-2.0 in pyproject.toml; final choice TBD per QUESTIONS.md)
 
 ---
@@ -43,9 +43,9 @@ Build a modular, voice-first macOS assistant that lives at the camera notch, wit
 
 ## Phase 3: Wake Word Detection
 
-- [ ] openWakeWord engine integration (`src/assistant/wake/openwakeword_engine.py`)
-- [ ] Model loading from `src/assistant/wake/models/`
-- [ ] Configurable wake word with fallback to double-click / triple-Shift
+- [x] openWakeWord engine integration (`src/assistant/wake/openwakeword_engine.py`)
+- [x] Model loading from `src/assistant/wake/models/`
+- [x] Configurable wake word with fallback to double-click / triple-Shift
 
 ---
 

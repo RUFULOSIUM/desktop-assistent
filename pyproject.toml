@@ -48,10 +48,10 @@ audio = [
 #     "pyobjc-framework-Quartz>=10.0",
 #     "pyobjc-framework-ApplicationServices>=10.0",
 # ]
-# wake = [
-#     "openwakeword>=0.5",
-#     "onnxruntime>=1.18",
-# ]
+wake = [
+    "openwakeword>=0.6",
+    "onnxruntime>=1.18",
+]
 # agent = [
 #     "pi-mono @ git+https://github.com/badlogic/pi-mono@main",
 # ]
