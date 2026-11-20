@@ -1,7 +1,10 @@
+# mypy: ignore-errors
+"""Tests for config module."""
+
 import tempfile
 from pathlib import Path
 
-import pytest  # type: ignore[import-not-found]
+import pytest
 
 
 def test_config_defaults() -> None:
@@ -199,3 +202,43 @@ def test_config_api_key_excluded_when_empty() -> None:
     cfg.llm.api_key = "test-key"
     d = cfg.to_dict()
     assert d["llm"]["api_key"] == "test-key"
+
+
+def test_security_config_empty_level() -> None:
+    from assistant.config import SecurityConfig
+
+    cfg = SecurityConfig(level="")
+    with pytest.raises(ValueError):
+        cfg.validate()
+
+
+def test_wake_config_long_word() -> None:
+    from assistant.config import WakeConfig
+
+    cfg = WakeConfig(word="x" * 51)
+    with pytest.raises(ValueError, match="too long"):
+        cfg.validate()
+
+
+def test_stt_config_validate() -> None:
+    from assistant.config import STTConfig
+
+    cfg = STTConfig(provider="invalid")
+    with pytest.raises(ValueError):
+        cfg.validate()
+
+
+def test_llm_config_validate() -> None:
+    from assistant.config import LLMConfig
+
+    cfg = LLMConfig(provider="invalid")
+    with pytest.raises(ValueError):
+        cfg.validate()
+
+
+def test_permissions_config_validate() -> None:
+    from assistant.config import PermissionsConfig
+
+    cfg = PermissionsConfig(private_paths=["/nonexistent/path"])
+    with pytest.raises(ValueError):
+        cfg.validate()
