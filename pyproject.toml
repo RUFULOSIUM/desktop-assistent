@@ -33,6 +33,7 @@ audio = [
     "sounddevice>=0.4",
     "numpy>=1.26",
     "webrtcvad>=2.0",
+    "pyobjc>=13.0",
 ]
 # stt = [
 #     "faster-whisper>=1.0",
