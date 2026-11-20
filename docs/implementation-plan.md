@@ -19,13 +19,13 @@ Build a modular, voice-first macOS assistant that lives at the camera notch, wit
 
 ## Phase 1: Core Infrastructure
 
-- [ ] Config system (`src/assistant/config.py`)
+- [x] Config system (`src/assistant/config.py`)
   - TOML-based config with security levels, wake word, STT/LLM providers
   - First-run API scanner
-- [ ] Logging (`src/assistant/logging.py`)
-- [ ] Error hierarchy (`src/assistant/errors.py`)
-- [ ] CLI entry point (`src/assistant/cli.py`)
-- [ ] Main app scaffold (`src/assistant/app.py`, `src/assistant/__main__.py`)
+- [x] Logging (`src/assistant/logging.py`)
+- [x] Error hierarchy (`src/assistant/errors.py`)
+- [x] CLI entry point (`src/assistant/cli.py`)
+- [x] Main app scaffold (`src/assistant/app.py`, `src/assistant/__main__.py`)
 
 ---
 
