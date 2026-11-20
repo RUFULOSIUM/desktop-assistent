@@ -7,6 +7,8 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np  # type: ignore[import-not-found]
+
 from assistant.config import WakeConfig
 from assistant.errors import WakeError
 
@@ -134,8 +136,6 @@ class WakeWordEngine:
             del self._audio_buffer[: self.FRAME_SIZE_BYTES]
 
             try:
-                import numpy as np  # type: ignore[import-not-found]
-
                 # Convert to numpy array (int16)
                 audio_data = np.frombuffer(frame, dtype=np.int16)
 
