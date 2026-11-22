@@ -2,9 +2,11 @@
 
 This is the agreed target for the Desktop Assistant, restated from the answers
 in [`QUESTIONS.md`](../QUESTIONS.md). It records *what* was decided and *why*;
-implementation detail belongs in the code, not here. The repository is
-currently a scaffold, so everything below is a decision to implement, not a
-description of working behaviour.
+implementation detail belongs in the code, not here.
+
+**Status: Core implementation complete.** Phases 0-11 and P1 polish items are
+implemented and tested (477 unit tests passing). See [implementation plan](../implementation-plan.md)
+for current status.
 
 ## 1. Product and scope
 
@@ -47,10 +49,8 @@ assistant is allowed to attempt.
 - Hotkey: fast triple-Shift.
 - Files can be dropped onto the blob.
 - Clipboard reads are allowed only at permission levels that permit it.
-- Sound effects match everything the assistant does.
-- Notifications are used only when verbosity is at its lowest and the user is
-  not actively watching — to signal that a permission is needed or a task has
-  finished.
+- **Sound effects** (✅ implemented): 8 events — wake, listening start/end, thinking, speaking, task complete, error, permission needed. Uses macOS NSSound with system defaults or custom files. Configurable per-state.
+- **Notifications** (✅ implemented): macOS UserNotifications for permission needed, task complete, errors. Respects `ui.verbosity` filter (silent/minimal/normal/verbose).
 
 ## 3. Voice, models and routing
 
@@ -59,8 +59,9 @@ a free cloud STT service for the variety of voices; fall back to on-device STT
 if that is not possible.
 
 **Router classifier.** A small Keras model with a maximum input of 5000
-characters, passed by Unicode. It outputs one boolean: agent or no-agent. No
-dataset exists yet; it has to be created as part of the project.
+characters, passed by Unicode. It outputs one boolean: agent or no-agent.
+Dataset: 10,012 labeled examples (`data/router/train.jsonl`). Trained model:
+`src/assistant/router/models/router_classifier.keras` (~51MB).
 
 **Chat path.** Text-only answers use a provider the user can connect themselves.
 On first startup the app scans the system for APIs already installed so they can
