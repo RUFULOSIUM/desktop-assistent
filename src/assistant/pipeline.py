@@ -18,6 +18,7 @@ from .audio.vad import VoiceActivityDetector
 from .config import Config
 from .llm import LLMProvider, create_llm_provider
 from .notify import get_notification_manager
+from .platform.clipboard import read_clipboard_text
 from .router import AGENT_SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, RouterClassifier, create_classifier
 from .stt import STTProvider, create_stt_provider
 from .tts import TTSProvider, create_tts_provider
@@ -337,6 +338,19 @@ class AssistantPipeline:
             if self._on_idle:
                 self._on_idle()
 
+    def _get_clipboard_context(self) -> str:
+        """Get clipboard content as context if permission is granted and clipboard has text."""
+        if not self.config.permissions.allow_clipboard:
+            return ""
+
+        try:
+            clipboard_text = read_clipboard_text()
+            if clipboard_text and clipboard_text.strip():
+                return f"\n\n[Clipboard:\n{clipboard_text[:2000]}\n]"
+        except Exception as e:
+            logger.warning(f"Failed to read clipboard: {e}")
+        return ""
+
     def process_transcription(
         self, text: str, dropped_files: list[str] | None = None
     ) -> PipelineResult:
@@ -352,12 +366,13 @@ class AssistantPipeline:
         if not text.strip():
             return PipelineResult(success=False, error="Empty transcription")
 
-        # Build context from dropped files
+        # Build context from dropped files and clipboard
         context = ""
         if dropped_files:
-            context = (
+            context += (
                 "\n\n[Attached files:\n" + "\n".join(f"  - {f}" for f in dropped_files) + "\n]"
             )
+        context += self._get_clipboard_context()
 
         logger.info(f"Processing transcription: {text}{context}")
 
@@ -378,23 +393,16 @@ class AssistantPipeline:
 
         try:
             if is_agent:
-                return self._handle_agent_task(text, dropped_files)
+                return self._handle_agent_task(text, context)
             else:
-                return self._handle_chat(text, dropped_files)
+                return self._handle_chat(text, context)
         finally:
             if self._on_idle:
                 self._on_idle()
 
-    def _handle_chat(self, text: str, dropped_files: list[str] | None = None) -> PipelineResult:
+    def _handle_chat(self, text: str, context: str) -> PipelineResult:
         """Handle chat path - direct LLM response."""
         assert self._llm is not None
-
-        # Build prompt with file context if available
-        context = ""
-        if dropped_files:
-            context = (
-                "\n\n[Attached files:\n" + "\n".join(f"  - {f}" for f in dropped_files) + "\n]"
-            )
 
         prompt = f"{CHAT_SYSTEM_PROMPT}\n\nUser: {text}{context}\nAssistant:"
         response = self._llm.complete(prompt, temperature=0.7, max_tokens=512)
@@ -416,19 +424,10 @@ class AssistantPipeline:
             is_agent_task=False,
         )
 
-    def _handle_agent_task(
-        self, text: str, dropped_files: list[str] | None = None
-    ) -> PipelineResult:
+    def _handle_agent_task(self, text: str, context: str) -> PipelineResult:
         """Handle agent path - dispatch to pi-mono."""
         assert self._llm is not None
         assert self._agent is not None
-
-        # Build task prompt for pi-mono with file context
-        context = ""
-        if dropped_files:
-            context = (
-                "\n\n[Attached files:\n" + "\n".join(f"  - {f}" for f in dropped_files) + "\n]"
-            )
 
         prompt = f"{AGENT_SYSTEM_PROMPT}\n\nUser request: {text}{context}"
         llm_response = self._llm.complete(prompt, temperature=0.3, max_tokens=1024)

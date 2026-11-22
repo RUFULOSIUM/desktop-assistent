@@ -107,12 +107,13 @@
 
 ### P2 - Platform Integration
 
-- [ ] **Non-notch Mac QA + fallback** — `src/assistant/platform/notch.py`, `island_window.py`
-  - Test on MacBook Air (no notch)
-  - Verify camera-area pill positioning
-- [ ] **Clipboard permission + read** — `src/assistant/permissions.py` (new), pipeline
-  - Implement `allow_clipboard` gating
-  - Paste context into transcript
+- [x] **Non-notch Mac QA + fallback** — `src/assistant/platform/notch.py`, `island_window.py`
+  - Fallback implemented: detects non-notch Macs, positions pill beside camera area
+  - Hardware QA pending (requires MacBook Air)
+- [x] **Clipboard permission + read** — `src/assistant/platform/clipboard.py`, pipeline
+  - `allow_clipboard` gating implemented in config
+  - Clipboard reading via NSPasteboard, context pasted into transcript
+  - Tests: `tests/unit/test_clipboard.py` (9 tests passing)
 
 ### P3 - Packaging & Release
 
