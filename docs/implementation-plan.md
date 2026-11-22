@@ -96,12 +96,14 @@
 - [x] **Drag-drop onto island** — `src/assistant/ui/island_view.py`, `island_window.py`
   - Accept file drops, pass to pipeline as context
   - Implemented: IslandView drag handlers, pipeline dropped file context, app callback wiring
-- [ ] **Sound effects system** — New `src/assistant/audio/sounds.py`
+- [x] **Sound effects system** — New `src/assistant/audio/sounds.py`
   - Wake, listening start/end, thinking, error, completion
   - Configurable per-state sounds
-- [ ] **Notification system** — New `src/assistant/notify.py`
+  - Implemented: SoundEvent enum, SoundConfig, SoundManager with NSSound, pipeline integration
+- [x] **Notification system** — New `src/assistant/notify.py`
   - Low-verbosity only: permission needed, task complete
   - macOS UserNotifications framework
+  - Implemented: NotificationType enum, NotificationConfig, NotificationManager, pipeline integration
 
 ### P2 - Platform Integration
 

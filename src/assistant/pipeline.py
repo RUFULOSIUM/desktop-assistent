@@ -5,18 +5,19 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 
 from .agent import AgentDispatcher, DispatchResult, create_dispatcher
+from .audio import SoundEvent, get_sound_manager
 from .audio.capture import AudioCapture
 from .audio.ringbuffer import AudioRingBuffer
 from .audio.vad import VoiceActivityDetector
-from .config import AudioConfig, Config
+from .config import Config
 from .llm import LLMProvider, create_llm_provider
+from .notify import get_notification_manager
 from .router import AGENT_SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, RouterClassifier, create_classifier
 from .stt import STTProvider, create_stt_provider
 from .tts import TTSProvider, create_tts_provider
@@ -57,6 +58,10 @@ class AssistantPipeline:
         self._listen_thread: threading.Thread | None = None
         self._stop_listening = threading.Event()
 
+        # Sound and notification managers
+        self._sound_manager = None
+        self._notification_manager = None
+
         # Callbacks
         self._on_wake_detected: Callable[[], None] | None = None
         self._on_listening: Callable[[], None] | None = None
@@ -72,6 +77,34 @@ class AssistantPipeline:
         with self._lock:
             if self._running:
                 return
+
+            # Initialize sound manager
+            if self.config.ui.sound_effects:
+                from .audio import SoundConfig
+
+                sound_config = SoundConfig(
+                    enabled=self.config.sound.enabled,
+                    volume=self.config.sound.volume,
+                    wake_detected=self.config.sound.wake_detected,
+                    listening_start=self.config.sound.listening_start,
+                    listening_end=self.config.sound.listening_end,
+                    thinking_start=self.config.sound.thinking_start,
+                    speaking_start=self.config.sound.speaking_start,
+                    task_complete=self.config.sound.task_complete,
+                    error=self.config.sound.error,
+                    permission_needed=self.config.sound.permission_needed,
+                )
+                self._sound_manager = get_sound_manager(sound_config)
+
+            # Initialize notification manager
+            if self.config.ui.notifications:
+                from .notify import NotificationConfig
+
+                notif_config = NotificationConfig(
+                    enabled=self.config.ui.notifications,
+                    min_verbosity=self.config.ui.verbosity,
+                )
+                self._notification_manager = get_notification_manager(notif_config)
 
             # Initialize STT
             self._stt = create_stt_provider(self.config.stt)
@@ -155,6 +188,9 @@ class AssistantPipeline:
     def _on_wake_word(self, model_name: str) -> None:
         """Internal wake word callback."""
         logger.info(f"Wake word detected: {model_name}")
+        # Play wake detected sound
+        if self._sound_manager:
+            self._sound_manager.play(SoundEvent.WAKE_DETECTED)
         if self._on_wake_detected:
             self._on_wake_detected()
         # Start listening
@@ -162,6 +198,9 @@ class AssistantPipeline:
 
     def _start_listening(self) -> None:
         """Start audio capture, VAD, and STT in a background thread."""
+        # Play listening start sound
+        if self._sound_manager:
+            self._sound_manager.play(SoundEvent.LISTENING_START)
         if self._on_listening:
             self._on_listening()
 
@@ -257,6 +296,9 @@ class AssistantPipeline:
             # Check if speech segment ended
             if speech_frames and silence_frames >= max_silence_frames:
                 if len(speech_frames) >= min_speech_frames:
+                    # Play listening end sound
+                    if self._sound_manager:
+                        self._sound_manager.play(SoundEvent.LISTENING_END)
                     # Process the accumulated speech
                     self._process_speech_segment(speech_frames)
                 speech_frames = []
@@ -287,10 +329,17 @@ class AssistantPipeline:
                 self._start_listening()  # Resume listening
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
+            # Play error sound
+            if self._sound_manager:
+                self._sound_manager.play(SoundEvent.ERROR)
+            if self._notification_manager:
+                self._notification_manager.notify_error(str(e), self.config.ui.verbosity)
             if self._on_idle:
                 self._on_idle()
 
-    def process_transcription(self, text: str, dropped_files: list[str] | None = None) -> PipelineResult:
+    def process_transcription(
+        self, text: str, dropped_files: list[str] | None = None
+    ) -> PipelineResult:
         """Process a transcription through the pipeline.
 
         Args:
@@ -306,7 +355,9 @@ class AssistantPipeline:
         # Build context from dropped files
         context = ""
         if dropped_files:
-            context = "\n\n[Attached files:\n" + "\n".join(f"  - {f}" for f in dropped_files) + "\n]"
+            context = (
+                "\n\n[Attached files:\n" + "\n".join(f"  - {f}" for f in dropped_files) + "\n]"
+            )
 
         logger.info(f"Processing transcription: {text}{context}")
 
@@ -317,6 +368,10 @@ class AssistantPipeline:
         # Route: chat vs agent
         is_agent = self._router.classify(text)
         logger.info(f"Router decision: {'agent' if is_agent else 'chat'}")
+
+        # Play thinking sound
+        if self._sound_manager:
+            self._sound_manager.play(SoundEvent.THINKING_START)
 
         if self._on_thinking:
             self._on_thinking()
@@ -337,7 +392,9 @@ class AssistantPipeline:
         # Build prompt with file context if available
         context = ""
         if dropped_files:
-            context = "\n\n[Attached files:\n" + "\n".join(f"  - {f}" for f in dropped_files) + "\n]"
+            context = (
+                "\n\n[Attached files:\n" + "\n".join(f"  - {f}" for f in dropped_files) + "\n]"
+            )
 
         prompt = f"{CHAT_SYSTEM_PROMPT}\n\nUser: {text}{context}\nAssistant:"
         response = self._llm.complete(prompt, temperature=0.7, max_tokens=512)
@@ -345,13 +402,23 @@ class AssistantPipeline:
         # Synthesize and play speech
         self._speak(response.text)
 
+        # Play task complete sound and notify
+        if self._sound_manager:
+            self._sound_manager.play(SoundEvent.TASK_COMPLETE)
+        if self._notification_manager:
+            self._notification_manager.notify_task_complete(
+                response.text[:60], self.config.ui.verbosity
+            )
+
         return PipelineResult(
             success=True,
             response=response.text,
             is_agent_task=False,
         )
 
-    def _handle_agent_task(self, text: str, dropped_files: list[str] | None = None) -> PipelineResult:
+    def _handle_agent_task(
+        self, text: str, dropped_files: list[str] | None = None
+    ) -> PipelineResult:
         """Handle agent path - dispatch to pi-mono."""
         assert self._llm is not None
         assert self._agent is not None
@@ -359,7 +426,9 @@ class AssistantPipeline:
         # Build task prompt for pi-mono with file context
         context = ""
         if dropped_files:
-            context = "\n\n[Attached files:\n" + "\n".join(f"  - {f}" for f in dropped_files) + "\n]"
+            context = (
+                "\n\n[Attached files:\n" + "\n".join(f"  - {f}" for f in dropped_files) + "\n]"
+            )
 
         prompt = f"{AGENT_SYSTEM_PROMPT}\n\nUser request: {text}{context}"
         llm_response = self._llm.complete(prompt, temperature=0.3, max_tokens=1024)
@@ -382,6 +451,13 @@ class AssistantPipeline:
         permissions = [p for p in permissions if p in allowed_permissions]
 
         if not permissions:
+            # Play error sound and notify
+            if self._sound_manager:
+                self._sound_manager.play(SoundEvent.ERROR)
+            if self._notification_manager:
+                self._notification_manager.notify_error(
+                    "No permissions granted for this task", self.config.ui.verbosity
+                )
             return PipelineResult(
                 success=False,
                 error="No permissions granted for this task",
@@ -397,8 +473,20 @@ class AssistantPipeline:
 
         if result.success:
             response_text = result.output or "Task completed successfully."
+            # Play task complete sound and notify
+            if self._sound_manager:
+                self._sound_manager.play(SoundEvent.TASK_COMPLETE)
+            if self._notification_manager:
+                self._notification_manager.notify_task_complete(
+                    response_text[:60], self.config.ui.verbosity
+                )
         else:
             response_text = f"Task failed: {result.error or 'Unknown error'}"
+            # Play error sound and notify
+            if self._sound_manager:
+                self._sound_manager.play(SoundEvent.ERROR)
+            if self._notification_manager:
+                self._notification_manager.notify_error(response_text, self.config.ui.verbosity)
 
         # Synthesize and play speech
         self._speak(response_text)
@@ -415,6 +503,10 @@ class AssistantPipeline:
         if not text.strip():
             return
 
+        # Play speaking start sound
+        if self._sound_manager:
+            self._sound_manager.play(SoundEvent.SPEAKING_START)
+
         if self._on_speaking:
             self._on_speaking(text)
 
@@ -427,6 +519,9 @@ class AssistantPipeline:
                 logger.info(f"Speech synthesized ({len(audio_data)} bytes), would play now")
             except Exception as e:
                 logger.error(f"TTS synthesis failed: {e}")
+                # Play error sound
+                if self._sound_manager:
+                    self._sound_manager.play(SoundEvent.ERROR)
 
     def _get_allowed_permissions(self) -> list[str]:
         """Get permissions allowed by security config."""
